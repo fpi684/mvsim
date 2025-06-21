@@ -52,13 +52,7 @@ EllipseCurveMethod::EllipseCurveMethod(
 namespace
 {
 // Heaviside function
-double miH(double x, double x0)
-{
-	if (x > x0)
-		return 1.0;
-	else
-		return 0.0;
-}
+double miH(double x, double x0) { return (x > x0) ? 1.0 : 0.0; }
 // Saturation function
 double miS(double x, double x0) { return x * miH(x0, std::abs(x)) + x0 * miH(std::abs(x), x0); }
 }  // namespace
@@ -94,15 +88,28 @@ mrpt::math::TVector2D EllipseCurveMethod::evaluate_friction(
 
 	// const mrpt::math::TVector2D linAccLocal = getAcc();
 	//  ¿Está bien? no se si se corresponde con la aceleración que quiero
-	const mrpt::math::TTwist2D& vel = myVehicle_.getVelocityLocal();  // ¿Está bien?
-	// const mrpt::math::TTwist2D& vel = myVehicle_.getVelocityLocalOdoEstimate();
-	const double w = vel.omega;
+	//const mrpt::math::TTwist2D& vel = myVehicle_.getVelocityLocal();  // ¿Está bien?
+	const mrpt::math::TTwist2D& vel = myVehicle_.getVelocityLocalOdoEstimate();
+	double w = vel.omega;
+	//double w= input.wheel.getW();
 
-	double delta = 0.0;
-	if (wheel_index >= 2) delta = input.wheel.yaw;	// angulo de la rueda
-	// const double delta = input.wheel.getPhi();
+
+	
 	// Rotate wheel velocity vector from veh. frame => wheel frame
-	const mrpt::poses::CPose2D wRot(pos[wheel_index].x, pos[wheel_index].y, delta);
+	const mrpt::poses::CPose2D wRot(0, 0, input.wheel.yaw);
+	const mrpt::poses::CPose2D wRotInv(0, 0, -input.wheel.yaw);
+
+	// Velocity of the wheel cog in the frame of the vehicle:
+	const mrpt::math::TPoint3D vel_v = {input.wheelCogLocalVel.x, input.wheelCogLocalVel.y, 0};
+
+	// Velocity of the wheel cog in the frame of the wheel itself:
+	const mrpt::math::TPoint3D vel_w = wRotInv.composePoint(vel_v);
+
+	// wheel angle around the vertical axis (wrt the vehicle frame):
+	double wheel_delta = 0.0;
+	if (wheel_index >= 2) wheel_delta = input.wheel.yaw;	// angulo de la rueda
+	//const double wheel_delta = input.wheel.yaw;
+
 
 	// Velocity of the wheel cog in the frame of the wheel itself: == vxT
 	// const mrpt::math::TVector2D vel_w = wRot.inverseComposePoint(input.wheelCogLocalVel);
@@ -132,49 +139,76 @@ mrpt::math::TVector2D EllipseCurveMethod::evaluate_friction(
 
 	double Fz = 0.0;  // Declaración antes del if
 
+
 	if (wheel_index == 2)  //(Wpos.x > 0 && Wpos.y > 0)
 	{
+	//	Fz = std::abs(
+	//		(m / (l * Axf)) * (a2 * gravity - h * (linAccLocal.x - w * vel.vy)) *
+	//		(std::abs(pos[1].y) - h * (linAccLocal.y + w * vel.vx) / gravity));
 		Fz = std::abs(
-			(m / (l * Axf)) * (a2 * gravity - h * (linAccLocal.x - w * vel.vy)) *
-			(std::abs(pos[1].y) - h * (linAccLocal.y + w * vel.vx) / gravity));
+			(m / (l * Axf)) * (a2 * gravity - h * linAccLocal.x) *
+			(std::abs(pos[1].y) - h * linAccLocal.y / gravity));
 	}
 	else if (wheel_index == 3)	//(Wpos.x < 0 && Wpos.y > 0)
 	{
-		Fz = std::abs(
-			(m / (l * Axf)) * (a2 * gravity - h * (linAccLocal.x - w * vel.vy)) *
-			(std::abs(pos[0].y) + h * (linAccLocal.y + w * vel.vx) / gravity));
+	//	Fz = std::abs(
+	//		(m / (l * Axf)) * (a2 * gravity - h * (linAccLocal.x - w * vel.vy)) *
+	//		(std::abs(pos[0].y) + h * (linAccLocal.y + w * vel.vx) / gravity));
+			Fz = std::abs(
+				(m / (l * Axf)) * (a2 * gravity - h * (linAccLocal.x )) *
+				(std::abs(pos[0].y) + h * (linAccLocal.y) / gravity));
 	}
 	else if (wheel_index == 1)	//(Wpos.x > 0 && Wpos.y < 0)
 	{
+	//	Fz = std::abs(
+	//		(m / (l * Axr)) * (a1 * gravity + h * (linAccLocal.x - w * vel.vy)) *
+	//		(std::abs(pos[3].y) - h * (linAccLocal.y + w * vel.vx) / gravity));		
 		Fz = std::abs(
-			(m / (l * Axr)) * (a1 * gravity + h * (linAccLocal.x - w * vel.vy)) *
-			(std::abs(pos[3].y) - h * (linAccLocal.y + w * vel.vx) / gravity));
+			(m / (l * Axr)) * (a1 * gravity + h * (linAccLocal.x)) *
+			(std::abs(pos[3].y) - h * (linAccLocal.y) / gravity));
 	}
 	else if (wheel_index == 0)	//(Wpos.x < 0 && Wpos.y < 0)
 	{
-		Fz = std::abs(
-			(m / (l * Axr)) * (a1 * gravity + h * (linAccLocal.x - w * vel.vy)) *
-			(std::abs(pos[2].y) + h * (linAccLocal.y + w * vel.vx) / gravity));
+	//	Fz = std::abs(
+	//		(m / (l * Axr)) * (a1 * gravity + h * (linAccLocal.x - w * vel.vy)) *
+	//		(std::abs(pos[2].y) + h * (linAccLocal.y + w * vel.vx) / gravity));
+			Fz = std::abs(
+				(m / (l * Axr)) * (a1 * gravity + h * (linAccLocal.x)) *
+				(std::abs(pos[2].y) + h * (linAccLocal.y) / gravity));
 	}
 	else
 	{
 		throw std::runtime_error("Invalid wheel index");  // Sin es mas de 4 ruedas generar error
 	}
 
+	const double partial_mass = input.weight / gravity + input.wheel.mass;
+
+	Fz = partial_mass * gravity; 
+
 	const double max_friction = Fz;
 
 	// 2) Wheels velocity at Tire SR (decoupled sub-problem)
 	// -------------------------------------------------
 	// duda de cambiar el codigo o no) VehicleBase.cpp line 575 calcula esto pero distinto
-	const double vxT = (vel.vx - w * pos[wheel_index].y) * cos(delta) +
-					   (vel.vy + w * pos[wheel_index].x) * sin(delta);
+	//double vxT = (vel.vx - input.wheel.getW() * pos[wheel_index].y) * cos(wheel_delta) +
+	//				   (vel.vy + input.wheel.getW() * pos[wheel_index].x) * sin(wheel_delta);
+
+	double vxT = (vel.vx - w * pos[wheel_index].y) * cos(wheel_delta) +
+					   (vel.vy + w * pos[wheel_index].x) * sin(wheel_delta);
+
+	//vxT = vel_v.x;
 
 	// 3) Longitudinal slip (decoupled sub-problem)
 	// -------------------------------------------------
 	// w= velocidad angular
-	double s = (R * input.wheel.getW() - vxT) /
-			   (R * input.wheel.getW() * miH(R * input.wheel.getW(), vxT) +
-				vxT * miH(vxT, R * input.wheel.getW()));
+	//double s = (R * input.wheel.getW() - vxT) /
+	//		   (R * input.wheel.getW() * miH(R * input.wheel.getW(), vxT) +
+	//			vxT * miH(vxT, R * input.wheel.getW()));
+	//double s = (R * w - vxT) /
+	//			(R * w * miH(R * w, vxT) +
+	//			 vxT * miH(vxT, R * w));
+
+	double s = (R * w - vxT) /std::max(R * w, vxT);
 
 	if (std::isnan(s)) s = 0;  // si es NAN se iguala a 0
 	if (std::isinf(s)) s = 0;  // si es INF se iguala a 0
@@ -182,7 +216,9 @@ mrpt::math::TVector2D EllipseCurveMethod::evaluate_friction(
 	// 4) Sideslip angle (decoupled sub-problem)
 	// -------------------------------------------------
 
-	double af = atan2((vel.vy + pos[wheel_index].x * w), (vel.vx - pos[wheel_index].y * w)) - delta;
+	//double af = atan2((vel.vy + pos[wheel_index].x * w), (vel.vx - pos[wheel_index].y * w)) - wheel_delta;
+	//double af = atan2((vel.vy + pos[wheel_index].x * w), (vel.vx - pos[wheel_index].y * w));
+	const double af = std::atan2(vel_v.y, vel_v.x);
 
 	// 5) Longitudinal friction (decoupled sub-problem)
 	// -------------------------------------------------
@@ -218,6 +254,7 @@ mrpt::math::TVector2D EllipseCurveMethod::evaluate_friction(
 	const double Vy = vel.vy;
 	const double Acx = linAccLocal.x;
 	const double Acy = linAccLocal.y;
+	
 
 	static int Show = 1;
 
@@ -236,12 +273,12 @@ mrpt::math::TVector2D EllipseCurveMethod::evaluate_friction(
 			"_________________________________________\n");
 	}
 
-	if (Show < 41)
+	if (Show < 4001)
 	{
 		printf(
-			"Wheel %u (Fz: %.2f, Fx: %.2f, Fy: %.2f, yaw: %.2f, Vx: %.2f, Vy: %.2f, Acx: %.2f, "
-			"Acy: %.2f, Mass %.2f)\n",
-			wheel_index, Fz, Fx, Fy, delta, Vx, Vy, Acx, Acy, m);
+			"Wheel %u (Fz: %.2f, Fx: %.2f, Fy: %.2f, yaw: %.2f, Vx: %.5f, Vy: %.5f, Acx: %.5f, "
+			"Acy: %.5f, Mass %.2f, w_wheel %.2f)\n",
+			wheel_index, Fz, Fx, Fy, wheel_delta, Vx, Vy, Acx, Acy, m, w);
 
 		if (Show % 4 == 0)
 		{
@@ -262,5 +299,19 @@ mrpt::math::TVector2D EllipseCurveMethod::evaluate_friction(
 	// Rotate to put: Wheel frame ==> vehicle local framework:
 	mrpt::math::TVector2D res;
 	wRot.composePoint(result_force_wrt_wheel, res);
+
+	// Logger:
+	//if (logger_ && !logger_->expired())
+	if (auto logger = logger_.lock(); logger)
+	{
+		//auto logger = logger_->lock();
+
+		logger->updateColumn("actual_wheel_alpha", actual_wheel_alpha);
+		logger->updateColumn("motorTorque", input.motorTorque);
+		logger->updateColumn("wheel_long_friction", wheel_long_friction);
+		logger->updateColumn("wheel_lateral_friction", wheel_lat_friction);
+	}
+
+
 	return res;
 }
